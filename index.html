@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Ultimate Racing</title>
+<title>Ultimate Racing Mobile</title>
 <style>
 body { margin:0; overflow:hidden; }
 
@@ -41,7 +41,6 @@ button {
 
 <div id="start">터치해서 시작</div>
 
-<!-- 모바일 패드 -->
 <div class="pad">
  <div>
   <button id="left">⬅️</button>
@@ -84,9 +83,8 @@ const track=new THREE.Mesh(
 track.rotation.x=-Math.PI/2;
 scene.add(track);
 
-// ===== 스타트 라인 (체커) =====
+// ===== 스타트 라인 =====
 const startLine=new THREE.Group();
-
 for(let i=0;i<10;i++){
  for(let j=0;j<2;j++){
   const tile=new THREE.Mesh(
@@ -101,10 +99,9 @@ for(let i=0;i<10;i++){
 }
 scene.add(startLine);
 
-// ===== 자동차 (진짜 모양) =====
+// ===== 자동차 =====
 const car=new THREE.Group();
 
-// 몸체
 const body=new THREE.Mesh(
  new THREE.BoxGeometry(2,0.6,4),
  new THREE.MeshPhongMaterial({color:0x00ff00})
@@ -112,7 +109,6 @@ const body=new THREE.Mesh(
 body.position.y=0.6;
 car.add(body);
 
-// 지붕
 const roof=new THREE.Mesh(
  new THREE.BoxGeometry(1.5,0.5,2),
  new THREE.MeshPhongMaterial({color:0x009900})
@@ -120,7 +116,6 @@ const roof=new THREE.Mesh(
 roof.position.set(0,1.1,0);
 car.add(roof);
 
-// 바퀴
 const wheels=[];
 function wheel(x,z){
  const w=new THREE.Mesh(
@@ -143,25 +138,53 @@ const keys={};
 document.addEventListener("keydown",e=>keys[e.key]=true);
 document.addEventListener("keyup",e=>keys[e.key]=false);
 
-// 모바일 버튼 연결
+// ===== 사운드 =====
+const driftSound=document.getElementById("driftSound");
+const crashSound=document.getElementById("crashSound");
+const lineSound=document.getElementById("lineSound");
+
+// ===== 모바일 버튼 (핵심 수정) =====
 function bind(btn,key){
- btn.onmousedown=()=>keys[key]=true;
- btn.onmouseup=()=>keys[key]=false;
- btn.ontouchstart=()=>keys[key]=true;
- btn.ontouchend=()=>keys[key]=false;
+
+ btn.onmousedown=()=>{
+  keys[key]=true;
+
+  // 👉 왼/오 누르면 옵 소리
+  if(key==="ArrowLeft" || key==="ArrowRight"){
+    driftSound.currentTime=0;
+    driftSound.loop=true;
+    driftSound.play().catch(()=>{});
+  }
+ };
+
+ btn.onmouseup=()=>{
+  keys[key]=false;
+  driftSound.pause();
+ };
+
+ btn.ontouchstart=()=>{
+  keys[key]=true;
+
+  if(key==="ArrowLeft" || key==="ArrowRight"){
+    driftSound.currentTime=0;
+    driftSound.loop=true;
+    driftSound.play().catch(()=>{});
+  }
+ };
+
+ btn.ontouchend=()=>{
+  keys[key]=false;
+  driftSound.pause();
+ };
 }
+
 bind(document.getElementById("up"),"ArrowUp");
 bind(document.getElementById("down"),"ArrowDown");
 bind(document.getElementById("left"),"ArrowLeft");
 bind(document.getElementById("right"),"ArrowRight");
 bind(document.getElementById("drift"),"Shift");
 
-// ===== 사운드 =====
-const driftSound=document.getElementById("driftSound");
-const crashSound=document.getElementById("crashSound");
-const lineSound=document.getElementById("lineSound");
-
-// 시작
+// ===== 시작 =====
 let started=false;
 document.getElementById("start").onclick=()=>{
  started=true;
@@ -172,7 +195,7 @@ document.getElementById("start").onclick=()=>{
  lineSound.play().then(()=>lineSound.pause());
 };
 
-// 물리
+// ===== 물리 =====
 let speed=0, turn=0, lastZ=-30;
 
 function animate(){
@@ -196,7 +219,6 @@ function animate(){
  car.position.x-=Math.sin(car.rotation.y)*speed;
  car.position.z-=Math.cos(car.rotation.y)*speed;
 
- // 바퀴 회전
  wheels.forEach(w=>w.rotation.x+=speed*0.3);
 
  // 충돌
@@ -210,14 +232,6 @@ function animate(){
   crashSound.currentTime=0;
   crashSound.play().catch(()=>{});
  }
-
- // 드리프트 사운드
- if(drifting && speed>0.3){
-  if(driftSound.paused){
-   driftSound.loop=true;
-   driftSound.play().catch(()=>{});
-  }
- } else driftSound.pause();
 
  // 스타트 라인
  if(lastZ < -30 && car.position.z >= -30){
