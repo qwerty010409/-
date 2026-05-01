@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Ultimate Racing</title>
+<style>
+body { margin:0; overflow:hidden; }
+
+#start {
+ position:absolute;
+ top:50%; left:50%;
+ transform:translate(-50%,-50%);
+ padding:20px;
+ background:black;
+ color:white;
+ z-index:10;
+}
+
+/* 모바일 패드 */
+.pad {
+ position:absolute;
+ bottom:20px;
+ width:100%;
+ display:flex;
+ justify-content:space-between;
+ padding:20px;
+ box-sizing:border-box;
+}
+
+button {
+ width:60px;
+ height:60px;
+ font-size:20px;
+ border:none;
+ border-radius:10px;
+ opacity:0.7;
+}
+</style>
+</head>
+<body>
+
+<div id="start">터치해서 시작</div>
+
+<!-- 모바일 패드 -->
+<div class="pad">
+ <div>
+  <button id="left">⬅️</button>
+  <button id="right">➡️</button>
+ </div>
+ <div>
+  <button id="up">⬆️</button>
+  <button id="down">⬇️</button>
+  <button id="drift">🟪</button>
+ </div>
+</div>
+
+<audio id="driftSound" src="op.mp3"></audio>
+<audio id="crashSound" src="yeoja.mp3"></audio>
+<audio id="lineSound" src="eeeey.mp3"></audio>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+// ===== 기본 =====
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const light = new THREE.DirectionalLight(0xffffff,1);
+light.position.set(10,20,10);
+scene.add(light);
+
+// ===== 트랙 =====
+const inner=20, outer=40;
+
+const track=new THREE.Mesh(
+ new THREE.RingGeometry(inner,outer,128),
+ new THREE.MeshPhongMaterial({color:0x222222,side:THREE.DoubleSide})
+);
+track.rotation.x=-Math.PI/2;
+scene.add(track);
+
+// ===== 스타트 라인 (체커) =====
+const startLine=new THREE.Group();
+
+for(let i=0;i<10;i++){
+ for(let j=0;j<2;j++){
+  const tile=new THREE.Mesh(
+   new THREE.BoxGeometry(1,0.05,1),
+   new THREE.MeshBasicMaterial({
+    color:(i+j)%2===0?0xffffff:0x000000
+   })
+  );
+  tile.position.set(-5+i,0.05,-30+j);
+  startLine.add(tile);
+ }
+}
+scene.add(startLine);
+
+// ===== 자동차 (진짜 모양) =====
+const car=new THREE.Group();
+
+// 몸체
+const body=new THREE.Mesh(
+ new THREE.BoxGeometry(2,0.6,4),
+ new THREE.MeshPhongMaterial({color:0x00ff00})
+);
+body.position.y=0.6;
+car.add(body);
+
+// 지붕
+const roof=new THREE.Mesh(
+ new THREE.BoxGeometry(1.5,0.5,2),
+ new THREE.MeshPhongMaterial({color:0x009900})
+);
+roof.position.set(0,1.1,0);
+car.add(roof);
+
+// 바퀴
+const wheels=[];
+function wheel(x,z){
+ const w=new THREE.Mesh(
+  new THREE.CylinderGeometry(0.5,0.5,0.5,16),
+  new THREE.MeshPhongMaterial({color:0x000000})
+ );
+ w.rotation.z=Math.PI/2;
+ w.position.set(x,0.3,z);
+ car.add(w);
+ wheels.push(w);
+}
+wheel(-1,-1.5); wheel(1,-1.5);
+wheel(-1,1.5); wheel(1,1.5);
+
+car.position.set(0,0.5,-30);
+scene.add(car);
+
+// ===== 입력 =====
+const keys={};
+document.addEventListener("keydown",e=>keys[e.key]=true);
+document.addEventListener("keyup",e=>keys[e.key]=false);
+
+// 모바일 버튼 연결
+function bind(btn,key){
+ btn.onmousedown=()=>keys[key]=true;
+ btn.onmouseup=()=>keys[key]=false;
+ btn.ontouchstart=()=>keys[key]=true;
+ btn.ontouchend=()=>keys[key]=false;
+}
+bind(document.getElementById("up"),"ArrowUp");
+bind(document.getElementById("down"),"ArrowDown");
+bind(document.getElementById("left"),"ArrowLeft");
+bind(document.getElementById("right"),"ArrowRight");
+bind(document.getElementById("drift"),"Shift");
+
+// ===== 사운드 =====
+const driftSound=document.getElementById("driftSound");
+const crashSound=document.getElementById("crashSound");
+const lineSound=document.getElementById("lineSound");
+
+// 시작
+let started=false;
+document.getElementById("start").onclick=()=>{
+ started=true;
+ document.getElementById("start").style.display="none";
+
+ driftSound.play().then(()=>driftSound.pause());
+ crashSound.play().then(()=>crashSound.pause());
+ lineSound.play().then(()=>lineSound.pause());
+};
+
+// 물리
+let speed=0, turn=0, lastZ=-30;
+
+function animate(){
+ requestAnimationFrame(animate);
+ if(!started) return;
+
+ if(keys["ArrowUp"]) speed+=0.05;
+ if(keys["ArrowDown"]) speed-=0.05;
+
+ speed*=0.98;
+ speed=Math.max(-1.5,Math.min(1.5,speed));
+
+ let drifting=keys["Shift"];
+
+ if(keys["ArrowLeft"]) turn+=drifting?0.01:0.004;
+ if(keys["ArrowRight"]) turn-=drifting?0.01:0.004;
+
+ turn*=0.9;
+ car.rotation.y+=turn*3;
+
+ car.position.x-=Math.sin(car.rotation.y)*speed;
+ car.position.z-=Math.cos(car.rotation.y)*speed;
+
+ // 바퀴 회전
+ wheels.forEach(w=>w.rotation.x+=speed*0.3);
+
+ // 충돌
+ let dist=Math.sqrt(car.position.x**2+car.position.z**2);
+ if(dist<inner||dist>outer){
+  let a=Math.atan2(car.position.z,car.position.x);
+  let t=dist<inner?inner:outer;
+  car.position.x=Math.cos(a)*t;
+  car.position.z=Math.sin(a)*t;
+  speed*=-0.5;
+  crashSound.currentTime=0;
+  crashSound.play().catch(()=>{});
+ }
+
+ // 드리프트 사운드
+ if(drifting && speed>0.3){
+  if(driftSound.paused){
+   driftSound.loop=true;
+   driftSound.play().catch(()=>{});
+  }
+ } else driftSound.pause();
+
+ // 스타트 라인
+ if(lastZ < -30 && car.position.z >= -30){
+  lineSound.currentTime=0;
+  lineSound.play().catch(()=>{});
+ }
+ lastZ=car.position.z;
+
+ // 카메라
+ camera.position.x=car.position.x+Math.sin(car.rotation.y)*8;
+ camera.position.z=car.position.z+Math.cos(car.rotation.y)*8;
+ camera.position.y=4;
+ camera.lookAt(car.position);
+
+ renderer.render(scene,camera);
+}
+
+animate();
+</script>
+
+</body>
+</html>
